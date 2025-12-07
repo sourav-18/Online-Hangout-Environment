@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: online-hangout-app
+    ports:
+      - 4015:4015
+    environment:
+      - SERVER_PORT=${SERVER_PORT}
+      - SERVER_ENVIRONMENT=${SERVER_ENVIRONMENT}
+      - SEVER_BASEURL=${SEVER_BASEURL}
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PARTITIONS=${REDIS_PARTITIONS}
+
+    depends_on:
+      - mongo
+      - redis
+    
+  mongo:
+    image: mongo:6
+    container_name: online-hangout-mongo
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: onlinehangout
+
+  redis:
+    image: redis:7-alpine
+    container_name: online-hangout-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1"]
+    restart: unless-stopped
