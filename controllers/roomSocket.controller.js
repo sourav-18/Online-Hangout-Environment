@@ -94,12 +94,12 @@ exports.disconnect = async (socket) => {
             roomDetails.players = roomDetails.players.filter((item) => item.userId != userId);
             roomDetails.joinPlayerCount--;
             await redisFun.set(redisKey.keys.room(roomId), JSON.stringify(roomDetails));
-            ioController.roomUpdate(roomId);
         } else {
             roomDetails.players[playerIndex].status = roomUtil.player.status.offline;
             await redisFun.set(redisKey.keys.room(roomId), JSON.stringify(roomDetails));
             ioController.emitRoom({ roomId, event: socketKeyUtil.emit.roomPlayerOffline, data: userId });
         }
+        ioController.roomUpdate(roomId);
     } catch (error) {
         devLogUtil(error);
     }

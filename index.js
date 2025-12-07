@@ -61,6 +61,10 @@ io.use(verify).on('connection', (socket) => {
         voiceMessageController.groupVoiceMessage(socket,meta,buffer);
     })
 
+    socket.on(socketKeyUtil.on.roomLeave,()=>{
+        socket.disconnect();
+    })
+
 
 
 })

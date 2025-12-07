@@ -12,12 +12,16 @@ module.exports = {
         roomPlayerGuessCorrectNumber:"on::room:player-guess-correct-number",
         roomPlayerScoreUpdate:"on:room:player-score-update",
         oneTwoOneMessage:"on::one-two-one-message",
+   
+
         groupMessage:"on::group-message",
-        groupVoiceMessage:"on::group-voice-message"
+        groupVoiceMessage:"on::group-voice-message",
     },
     on: {
         roomPlayerGuessNumber:"room:guess-number",
         oneTwoOneMessage:"one-two-one-message",
+        roomLeave:"room::leave",
+
         groupMessage:"group-message",
         groupVoiceMessage:"group-voice-message"
     }
