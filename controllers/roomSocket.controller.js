@@ -12,7 +12,10 @@ exports.join = async (socket) => {
 
         if (!roomDetails) {
             roomDetails = {
-                players: [{ userId: userId, action: roomUtil.player.action.ideal, status: roomUtil.player.status.online }],
+                players: [{
+                    userId: userId, action: roomUtil.player.action.ideal, status: roomUtil.player.status.online,
+                    guessNumbers: [], correctAnswerCount: 0, socketId: socket.id
+                }],
                 joinPlayerCount: 1,
                 numberOfPlayer: numberOfPlayer,
                 numberOfRound: numberOfRound,
@@ -29,14 +32,19 @@ exports.join = async (socket) => {
             }
             else if (roomDetails.status == roomUtil.status.live) {
                 const playerIndex = roomDetails.players.findIndex((item) => item.userId == userId);
-                if (playerIndex == -1) {
+                if (playerIndex != -1) {
                     roomDetails.players[playerIndex].status = roomUtil.player.status.online
+                    roomDetails.players[playerIndex].socketId = socket.id
+                    ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomPlayerOnline, data: userId });
                 }
-                ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomPlayerOnline, data: userId });
             } else if (roomDetails.joinPlayerCount < roomDetails.numberOfPlayer) {
-                roomDetails.players.push({ userId: userId, action: roomUtil.player.action.ideal, status: roomUtil.player.status.online });
+                roomDetails.players.push({
+                    userId: userId, action: roomUtil.player.action.ideal,
+                    status: roomUtil.player.status.online, guessNumbers: [], correctAnswerCount: 0,
+                    socketId: socket.id
+                });
                 roomDetails.joinPlayerCount++;
-                ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomPlayerJoin, data: userId });
+                ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomPlayerJoin, data: userId, });
             } else {
                 ioController.emitToUserError({ socketId: socket.id, message: "Room was full" });
                 return;
@@ -96,6 +104,74 @@ exports.disconnect = async (socket) => {
         devLogUtil(error);
     }
 }
+
+exports.guessNumber = async (socket, data) => {
+    const roomId = socket.data.roomId;
+    const userId = socket.data.userId;
+
+    let roomDetails = await redisFun.get(redisKey.keys.room(roomId));
+    if (!roomDetails) return;
+    roomDetails = JSON.parse(roomDetails);
+    if (roomDetails.status != roomUtil.status.live) return;
+    const playerIndex = roomDetails.players.findIndex((item) => item.userId == userId);
+    if (playerIndex == -1) return;
+
+    if (roomDetails.players[playerIndex].action == roomUtil.player.action.ideal) {
+        roomDetails.players[playerIndex].guessNumbers.push(data.guessNumber)
+        roomDetails.players[playerIndex].action = roomUtil.player.action.guess;
+        await redisFun.set(redisKey.keys.room(roomId), JSON.stringify(roomDetails));
+        ioController.emitRoom({ roomId: socket.data.roomId, event: socketKeyUtil.emit.roomPlayerGuessNumber, data: { userId: userId } })
+        initiateNextRound(roomId);
+    }
+
+}
+
+async function initiateNextRound(roomId) {
+    let roomDetails = await redisFun.get(redisKey.keys.room(roomId));
+    if (!roomDetails) return;
+    roomDetails = JSON.parse(roomDetails);
+    if (roomDetails.status != roomUtil.status.live) return;
+
+    let guessPlayers = roomDetails.players.filter((item) => item.action == roomUtil.player.action.guess);
+    if (guessPlayers.length == roomDetails.numberOfPlayer) {
+        const correctAnswer = roomDetails.randomValues[roomDetails.currentRound];
+        ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomCorrectGuessNumber, data: correctAnswer });
+
+        let isAnyUserGuessCorrectNumber = false;
+        for (let i = 0; i < roomDetails.players.length; i++) {
+            roomDetails.players[i].action = roomUtil.player.action.ideal;
+            if (roomDetails.players[i].guessNumbers[roomDetails.currentRound] == correctAnswer) {
+                ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomPlayerGuessCorrectNumber, data: { userId: roomDetails.players[i].userId } })
+                isAnyUserGuessCorrectNumber = true;
+                roomDetails.players[i].correctAnswerCount++;
+            }
+        }
+
+        roomDetails.currentRound++;
+        await redisFun.set(redisKey.keys.room(roomId), JSON.stringify(roomDetails));
+        ioController.updatePlayerScore(roomId);
+        if (roomDetails.currentRound == roomDetails.numberOfRound) {
+            completedGame(roomId);
+        }
+
+    }
+
+}
+
+async function completedGame(roomId) {
+    let roomDetails = await redisFun.get(redisKey.keys.room(roomId));
+    if (!roomDetails) return;
+    roomDetails = JSON.parse(roomDetails);
+    if (roomDetails.status == roomUtil.status.live) {
+        roomDetails.status = roomUtil.status.completed;
+        await redisFun.set(redisKey.keys.room(roomId), JSON.stringify(roomDetails));
+        ioController.emitRoom({ roomId: roomId, event: socketKeyUtil.emit.roomStatusUpdate, data: roomUtil.status.completed });
+    }
+
+}
+
+
+
 
 function getRandomNumber(range) {
     let arr = [];

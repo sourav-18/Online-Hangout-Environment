@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Voice Message Demo</title>
+</head>
+
+<body>
+    <h3>Voice message demo</h3>
+    <label>Your user id: <input id="userId" /></label><br><br>
+    <label>room id: <input id="roomId" /></label><br><br>
+    <button id="roomJoin">Join Room</button>
+    <button id="startRec">Start Recording</button>
+    <button id="stopRec" disabled>Stop & Send</button>
+
+    <div id="inbox"></div>
+
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+        let socket = null;
+
+        let mediaRecorder;
+        let recordedChunks = [];
+        document.getElementById('roomJoin').onclick = async () => {
+            const roomId = document.getElementById('roomId').value.trim();
+            const userId = document.getElementById('userId').value.trim();
+            socket = io("http://localhost:4015", {
+                transports: ["websocket"],   
+                query:{
+                    userId:userId,
+                    roomId:roomId
+                }
+            }
+            )
+            socket.on('on::group-voice-message', async (data) => {
+                const nodeBuffer = data?.data?.nodeBuffer;
+                const meta=data?.data?.payload;
+                console.log(data)
+                const blob = new Blob([nodeBuffer], { type: meta.mimeType || 'audio/webm' });
+
+                const inbox = document.getElementById('inbox');
+                const item = document.createElement('div');
+                item.innerHTML = `<strong>From ${meta.from}</strong> — <button class="play">Play</button> <a download="${meta.filename}" href="#"></a>`;
+                inbox.prepend(item);
+
+                const playBtn = item.querySelector('.play');
+                const downloadLink = item.querySelector('a');
+
+                const url = URL.createObjectURL(blob);
+                downloadLink.href = url;
+                downloadLink.download = meta.filename;
+
+                playBtn.onclick = () => {
+                    const a = new Audio(url);
+                    a.play().catch(e => console.warn('play blocked', e));
+                };
+            });
+            socket.on('error', (msg) => console.warn('server error', msg));
+        }
+
+        document.getElementById('startRec').onclick = async () => {
+            recordedChunks = [];
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const options = { mimeType: 'audio/webm;codecs=opus' };
+                mediaRecorder = new MediaRecorder(stream, options);
+                mediaRecorder.ondataavailable = e => {
+                    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+                };
+                mediaRecorder.start();
+                document.getElementById('startRec').disabled = true;
+                document.getElementById('stopRec').disabled = false;
+                console.log('recording...');
+            } catch (err) {
+                console.error('mic error', err);
+                alert('Could not access microphone: ' + err.message);
+            }
+        };
+
+        document.getElementById('stopRec').onclick = async () => {
+            if (!mediaRecorder) return;
+            mediaRecorder.stop();
+            document.getElementById('startRec').disabled = false;
+            document.getElementById('stopRec').disabled = true;
+
+            mediaRecorder.onstop = async () => {
+
+                const blob = new Blob(recordedChunks, { type: recordedChunks[0]?.type || 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                audio.controls = true;
+
+                const arrayBuffer = await blob.arrayBuffer();
+                const meta = {
+                    filename: 'voice.webm',
+                    mimeType: blob.type
+                };
+
+                socket.emit("group-voice-message", meta, arrayBuffer);
+            };
+        };
+    </script>
+</body>
+
+</html>
