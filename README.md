@@ -4,9 +4,11 @@ A simple multiplayer backend for a “Guess the Number (1–9)” game. Players 
 
 ## Run the Project
 
+```bash
 git clone https://github.com/sourav-18/Online-Hangout-Environment
 cd Online-Hangout-Environment
 docker compose up
+```
 
 Postman Collection:  
 https://www.postman.com/cloudy-crescent-770366/workspace/online-hangout-api-socket
